@@ -1,3 +1,0 @@
-certsDir: ./certs
-services:
-  main: ./main/service.yml

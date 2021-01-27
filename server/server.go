@@ -25,8 +25,6 @@ func StartHttpsServer(certsDir string, hosts []string, port int, handler http.Ha
 	go func() {
 		if err := server.ListenAndServeTLS("", ""); err != http.ErrServerClosed {
 			log.Fatalf("HTTPS server error: %v", err)
-		} else {
-			log.Printf("HTTPS server started")
 		}
 	}()
 
@@ -53,8 +51,6 @@ func StartHttpRedirectServer(port int) func() {
 	go func() {
 		if err := server.ListenAndServe(); err != http.ErrServerClosed {
 			log.Fatalf("HTTP redirect server error: %v", err)
-		} else {
-			log.Printf("HTTP redirect server started")
 		}
 	}()
 
@@ -64,5 +60,26 @@ func StartHttpRedirectServer(port int) func() {
 		server.Shutdown(ctx)
 		server.Close()
 		log.Printf("HTTP redirect server closed")
+	}
+}
+
+func StartHttpServer(port int, handler http.Handler) func() {
+	server := &http.Server{
+		Addr:    fmt.Sprintf("0.0.0.0:%d", port),
+		Handler: handler,
+	}
+
+	go func() {
+		if err := server.ListenAndServe(); err != http.ErrServerClosed {
+			log.Fatalf("HTTP server error: %v", err)
+		}
+	}()
+
+	return func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		server.Shutdown(ctx)
+		server.Close()
+		log.Printf("HTTP server closed")
 	}
 }

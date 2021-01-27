@@ -2,6 +2,8 @@ package config
 
 import (
 	"net/http"
+
+	"gopkg.in/yaml.v2"
 )
 
 type ReverseProxy struct {
@@ -36,13 +38,25 @@ type Endpoint struct {
 }
 
 type Service struct {
+	Name      string
 	Enabled   bool
 	Endpoints []Endpoint
 }
 
 type Config struct {
-	CertsDir string
-	Services []Service
+	HttpPort        int
+	HttpsPort       int
+	RedirectToHttps bool
+	CertsDir        string
+	Services        []Service
+}
+
+func (cfg Config) HttpEnabled() bool {
+	return cfg.HttpPort != 0
+}
+
+func (cfg Config) HttpsEnabled() bool {
+	return cfg.HttpsPort != 0
 }
 
 func (cfg Config) GetHosts() []string {
@@ -89,23 +103,10 @@ func (cfg Config) GetHandler() http.Handler {
 	})
 }
 
-func DefaultConfig() Config {
-	return Config{
-		CertsDir: "./certs",
-		Services: []Service{
-			Service{
-				Enabled: true,
-				Endpoints: []Endpoint{
-					Endpoint{
-						Host: "kakotkin.ru",
-						Path: "/",
-						Action: ServeStatic{
-							Dir:     "./static",
-							Page404: "404.html",
-						},
-					},
-				},
-			},
-		},
+func (cfg Config) AsYaml() string {
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return err.Error()
 	}
+	return string(data)
 }
