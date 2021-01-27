@@ -1,0 +1,9 @@
+listen:
+  - scheme: http
+    proto: 80
+  - scheme: https
+    autocert: true
+    port: 443
+
+certsDir: ./certs
+servicesDir: ./services

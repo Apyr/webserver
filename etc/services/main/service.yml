@@ -1,0 +1,9 @@
+service:
+  enabled: true
+  endpoints:
+    - host: kakotkin.ru
+      path: /api
+      reverseProxy: localhost:1234
+    - host: kakotkin.ru
+      path: /
+      serveStatic: cache # | files
