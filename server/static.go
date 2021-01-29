@@ -1,19 +1,15 @@
-package config
+package server
 
 import (
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"webserver/config"
 )
 
-func (redirect Redirect) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, redirect.To, http.StatusSeeOther)
-}
-
-func (proxy ReverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	handler := context.getProxy(proxy.Url)
-	handler.ServeHTTP(w, r)
+type staticHandler struct {
+	config.Static
 }
 
 func isDirectory(path string) (bool, error) {
@@ -24,7 +20,7 @@ func isDirectory(path string) (bool, error) {
 	return fileInfo.IsDir(), err
 }
 
-func (static ServeStatic) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (static staticHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	name := filepath.Join(static.Dir, r.URL.Path)
 	name = filepath.Clean(name)
 	dir, err := isDirectory(name)

@@ -1,8 +1,6 @@
 package config
 
 import (
-	"net/http"
-
 	"gopkg.in/yaml.v2"
 )
 
@@ -11,25 +9,22 @@ type ReverseProxy struct {
 	Replace *string
 }
 
-func (_ ReverseProxy) actionMark() {}
-
-type ServeStatic struct {
+type Static struct {
 	Dir     string
 	Page404 string
 }
-
-func (_ ServeStatic) actionMark() {}
 
 type Redirect struct {
 	To string
 }
 
-func (_ Redirect) actionMark() {}
-
 type Action interface {
-	http.Handler
 	actionMark()
 }
+
+func (_ Redirect) actionMark()     {}
+func (_ Static) actionMark()       {}
+func (_ ReverseProxy) actionMark() {}
 
 type Endpoint struct {
 	Host   string
@@ -75,32 +70,6 @@ func (cfg Config) GetHosts() []string {
 		hostnames = append(hostnames, host)
 	}
 	return hostnames
-}
-
-func (cfg Config) GetHandler() http.Handler {
-	hosts := make(map[string]*http.ServeMux)
-	for _, service := range cfg.Services {
-		if !service.Enabled {
-			continue
-		}
-		for _, endpoint := range service.Endpoints {
-			mux := hosts[endpoint.Host]
-			if mux == nil {
-				mux = http.NewServeMux()
-				hosts[endpoint.Host] = mux
-			}
-			mux.Handle(endpoint.Path, endpoint.Action)
-		}
-	}
-
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mux := hosts[r.Host]
-		if mux != nil {
-			mux.ServeHTTP(w, r)
-		} else {
-			http.NotFound(w, r)
-		}
-	})
 }
 
 func (cfg Config) AsYaml() string {

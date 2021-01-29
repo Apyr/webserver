@@ -15,7 +15,7 @@ services:
 
 var defaultService = `enabled: true
 endpoints:
-  - host: localhost:8080
+  - host: localhost
     path: /
     static: 
       dir: ./static

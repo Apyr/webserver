@@ -50,7 +50,7 @@ func TestBasicConfig(t *testing.T) {
 					Endpoint{
 						Host: "localhost",
 						Path: "/",
-						Action: ServeStatic{
+						Action: Static{
 							Dir:     filepath.Join(dir, "."),
 							Page404: "page404.html",
 						},

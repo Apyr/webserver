@@ -27,7 +27,7 @@ func main() {
 	//log.Print(cfg.AsYaml())
 
 	close := make([]func(), 0)
-	handler := cfg.GetHandler()
+	handler := server.BuildHandler(cfg)
 	if cfg.HttpsEnabled() {
 		os.Mkdir(cfg.CertsDir, os.ModePerm|os.ModeDir)
 		c := server.StartHttpsServer(cfg.CertsDir, cfg.GetHosts(), cfg.HttpsPort, handler)

@@ -136,12 +136,12 @@ type StaticImportStruct struct {
 	Page404 *string
 }
 
-func (s StaticImportStruct) to() ServeStatic {
+func (s StaticImportStruct) to() Static {
 	page := "404.html"
 	if s.Page404 != nil {
 		page = *s.Page404
 	}
-	return ServeStatic{
+	return Static{
 		Dir:     s.Dir,
 		Page404: page,
 	}
