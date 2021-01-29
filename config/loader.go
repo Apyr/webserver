@@ -5,6 +5,8 @@ import (
 	"io/ioutil"
 	"path/filepath"
 
+	"strings"
+
 	"gopkg.in/yaml.v2"
 )
 
@@ -34,14 +36,14 @@ func (s ServiceImportStruct) to(dir string) (Service, error) {
 		if err != nil {
 			return Service{}, err
 		}
-		endpoints = append(endpoints, e)
+		endpoints = append(endpoints, e...)
 	}
 	return Service{"", enabled, endpoints}, nil
 }
 
 //internal
 type EndpointImportStruct struct {
-	Host         string
+	Host         interface{}
 	Path         *string
 	ReverseProxy *ReverseProxyImportStruct `yaml:"reverseProxy"`
 	Static       *StaticImportStruct
@@ -68,12 +70,12 @@ func (e EndpointImportStruct) check() error {
 	return nil
 }
 
-func (e EndpointImportStruct) to(dir string) (Endpoint, error) {
+func (e EndpointImportStruct) to(dir string) ([]Endpoint, error) {
 	var action Action = nil
 
 	err := e.check()
 	if err != nil {
-		return Endpoint{}, err
+		return nil, err
 	}
 
 	if e.ReverseProxy != nil {
@@ -92,21 +94,40 @@ func (e EndpointImportStruct) to(dir string) (Endpoint, error) {
 	if e.Path != nil {
 		path = *e.Path
 	}
-	return Endpoint{e.Host, path, action}, nil
+
+	var endpoints []Endpoint
+	switch host := e.Host.(type) {
+	case string:
+		endpoints = []Endpoint{
+			Endpoint{strings.TrimSpace(host), path, action},
+		}
+	case []interface{}:
+		endpoints = []Endpoint{}
+		for _, h := range host {
+			host, ok := h.(string)
+			if !ok {
+				return nil, fmt.Errorf("Host must be string or array of strings")
+			}
+			endpoints = append(
+				endpoints,
+				Endpoint{strings.TrimSpace(host), path, action},
+			)
+		}
+	default:
+		return nil, fmt.Errorf("Host must be string or array of strings")
+	}
+
+	return endpoints, nil
 }
 
 //internal
 type ReverseProxyImportStruct struct {
-	Host *string
-	Port int
+	Url     string
+	Replace *string
 }
 
 func (p ReverseProxyImportStruct) to() ReverseProxy {
-	host := "localhost"
-	if p.Host != nil {
-		host = *p.Host
-	}
-	return ReverseProxy{host, p.Port}
+	return ReverseProxy{p.Url, p.Replace}
 }
 
 //internal

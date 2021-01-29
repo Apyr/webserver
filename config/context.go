@@ -1,7 +1,7 @@
 package config
 
 import (
-	"fmt"
+	"log"
 	"net/http/httputil"
 	"net/url"
 	"sync"
@@ -9,13 +9,13 @@ import (
 
 type contextStruct struct {
 	mutex          sync.Mutex
-	reverseProxies map[ReverseProxy]*httputil.ReverseProxy
+	reverseProxies map[string]*httputil.ReverseProxy
 }
 
 func newContext() *contextStruct {
 	return &contextStruct{
 		mutex:          sync.Mutex{},
-		reverseProxies: make(map[ReverseProxy]*httputil.ReverseProxy),
+		reverseProxies: make(map[string]*httputil.ReverseProxy),
 	}
 }
 
@@ -23,12 +23,15 @@ func RenewContext() {
 	context = newContext()
 }
 
-func (context *contextStruct) getProxy(key ReverseProxy) *httputil.ReverseProxy {
+func (context *contextStruct) getProxy(key string) *httputil.ReverseProxy {
 	context.mutex.Lock()
 	defer context.mutex.Unlock()
 	val := context.reverseProxies[key]
 	if val == nil {
-		u, _ := url.Parse(fmt.Sprintf("http://%s:%d", key.Host, key.Port))
+		u, err := url.Parse(key)
+		if err != nil {
+			log.Fatalf("Reverse proxy url parsing error: %s", err)
+		}
 		val = httputil.NewSingleHostReverseProxy(u)
 		context.reverseProxies[key] = val
 	}

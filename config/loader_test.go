@@ -1,9 +1,9 @@
 package config
 
 import (
+	"fmt"
 	"io/ioutil"
 	"path/filepath"
-	"reflect"
 	"testing"
 )
 
@@ -27,52 +27,59 @@ endpoints:
   - host: localhost
     path: /api
     reverseProxy:
-      host: example.com
-      port: 80
-  - host: example.com
-    redirect: https://example.com
+      url: http://example.com
+  - host:
+      - example.com
+      - www.example.com
+    redirect: https://example2.com
 `
 
-var expectedConfig = Config{
-	HttpPort:        80,
-	HttpsPort:       443,
-	RedirectToHttps: false,
-	CertsDir:        "certs",
-	Services: []Service{
-		Service{
-			Name:    "default",
-			Enabled: true,
-			Endpoints: []Endpoint{
-				Endpoint{
-					Host: "localhost",
-					Path: "/",
-					Action: ServeStatic{
-						Dir:     ".",
-						Page404: "page404.html",
+func TestBasicConfig(t *testing.T) {
+	dir := t.TempDir()
+
+	expectedConfig := Config{
+		HttpPort:        80,
+		HttpsPort:       443,
+		RedirectToHttps: false,
+		CertsDir:        "certs",
+		Services: []Service{
+			Service{
+				Name:    "default",
+				Enabled: true,
+				Endpoints: []Endpoint{
+					Endpoint{
+						Host: "localhost",
+						Path: "/",
+						Action: ServeStatic{
+							Dir:     filepath.Join(dir, "."),
+							Page404: "page404.html",
+						},
 					},
-				},
-				Endpoint{
-					Host: "localhost",
-					Path: "/api",
-					Action: ReverseProxy{
+					Endpoint{
+						Host: "localhost",
+						Path: "/api",
+						Action: ReverseProxy{
+							Url: "http://example.com",
+						},
+					},
+					Endpoint{
 						Host: "example.com",
-						Port: 80,
+						Path: "/",
+						Action: Redirect{
+							To: "https://example2.com",
+						},
 					},
-				},
-				Endpoint{
-					Host: "example.com",
-					Path: "/",
-					Action: Redirect{
-						To: "https://example.com",
+					Endpoint{
+						Host: "www.example.com",
+						Path: "/",
+						Action: Redirect{
+							To: "https://example2.com",
+						},
 					},
 				},
 			},
 		},
-	},
-}
-
-func TestBasicConfig(t *testing.T) {
-	dir := t.TempDir()
+	}
 
 	err := ioutil.WriteFile(filepath.Join(dir, "config.yml"), []byte(basicConfig), 0666)
 	if err != nil {
@@ -88,7 +95,10 @@ func TestBasicConfig(t *testing.T) {
 		t.Error(err)
 	}
 
-	if reflect.DeepEqual(cfg, expectedConfig) {
-		t.Errorf("Got config: %#v", cfg)
+	cfgStr := fmt.Sprintf("%#v", cfg)
+	expectedStr := fmt.Sprintf("%#v", expectedConfig)
+
+	if cfgStr != expectedStr {
+		t.Errorf("Got config:\n%s\nExpected:\n%s", cfgStr, expectedStr)
 	}
 }

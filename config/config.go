@@ -7,8 +7,8 @@ import (
 )
 
 type ReverseProxy struct {
-	Host string
-	Port int
+	Url     string
+	Replace *string
 }
 
 func (_ ReverseProxy) actionMark() {}
