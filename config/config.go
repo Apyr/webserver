@@ -1,6 +1,12 @@
 package config
 
 import (
+	"log"
+	"os"
+	"os/signal"
+	"time"
+
+	"github.com/fsnotify/fsnotify"
 	"gopkg.in/yaml.v2"
 )
 
@@ -19,12 +25,12 @@ type Redirect struct {
 }
 
 type Action interface {
-	actionMark()
+	action()
 }
 
-func (_ Redirect) actionMark()     {}
-func (_ Static) actionMark()       {}
-func (_ ReverseProxy) actionMark() {}
+func (_ Redirect) action()     {}
+func (_ Static) action()       {}
+func (_ ReverseProxy) action() {}
 
 type Endpoint struct {
 	Host   string
@@ -44,6 +50,7 @@ type Config struct {
 	RedirectToHttps bool
 	CertsDir        string
 	Services        []Service
+	ConfigFiles     []string
 }
 
 func (cfg Config) HttpEnabled() bool {
@@ -78,4 +85,38 @@ func (cfg Config) AsYaml() string {
 		return err.Error()
 	}
 	return string(data)
+}
+
+func (cfg Config) Watch() bool {
+	watcher, err := fsnotify.NewWatcher()
+	showErr := func(err error) {
+		log.Printf("Watcher error: %s\n", err)
+		time.Sleep(5 * time.Second)
+	}
+	if err != nil {
+		showErr(err)
+		return true
+	}
+	defer watcher.Close()
+
+	for _, file := range cfg.ConfigFiles {
+		if err := watcher.Add(file); err != nil {
+			showErr(err)
+			return true
+		}
+	}
+
+	interrupt := make(chan os.Signal, 1)
+	signal.Notify(interrupt, os.Interrupt)
+
+	select {
+	case <-interrupt:
+		return false
+	case <-watcher.Events:
+		log.Println("Config changed. Reloading...")
+		return true
+	case err := <-watcher.Errors:
+		showErr(err)
+		return true
+	}
 }

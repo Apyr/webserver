@@ -37,11 +37,14 @@ endpoints:
 func TestBasicConfig(t *testing.T) {
 	dir := t.TempDir()
 
+	cfgPath := filepath.Join(dir, "config.yml")
+	srvPath := filepath.Join(dir, "service.yml")
+
 	expectedConfig := Config{
 		HttpPort:        80,
 		HttpsPort:       443,
 		RedirectToHttps: false,
-		CertsDir:        "certs",
+		CertsDir:        filepath.Join(dir, "certs"),
 		Services: []Service{
 			Service{
 				Name:    "default",
@@ -79,18 +82,19 @@ func TestBasicConfig(t *testing.T) {
 				},
 			},
 		},
+		ConfigFiles: []string{cfgPath, srvPath},
 	}
 
-	err := ioutil.WriteFile(filepath.Join(dir, "config.yml"), []byte(basicConfig), 0666)
+	err := ioutil.WriteFile(cfgPath, []byte(basicConfig), 0666)
 	if err != nil {
 		t.Error(err)
 	}
-	err = ioutil.WriteFile(filepath.Join(dir, "service.yml"), []byte(basicService), 0666)
+	err = ioutil.WriteFile(srvPath, []byte(basicService), 0666)
 	if err != nil {
 		t.Error(err)
 	}
 
-	cfg, err := LoadConfig(filepath.Join(dir, "config.yml"))
+	cfg, err := LoadConfig(cfgPath)
 	if err != nil {
 		t.Error(err)
 	}

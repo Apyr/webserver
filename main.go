@@ -15,24 +15,17 @@ func fileExists(filename string) bool {
 	return !info.IsDir()
 }
 
-func main() {
-	if !fileExists("config.yml") {
-		config.SaveDefault()
-		log.Println("Default config saved")
-	}
-	cfg, err := config.LoadConfig("config.yml")
-	if err != nil {
-		log.Fatalf("%v", err)
-	}
-	//log.Print(cfg.AsYaml())
-
+func startServer(cfg config.Config) func() {
 	close := make([]func(), 0)
+
 	handler := server.BuildHandler(cfg)
+
 	if cfg.HttpsEnabled() {
 		os.Mkdir(cfg.CertsDir, os.ModePerm|os.ModeDir)
 		c := server.StartHttpsServer(cfg.CertsDir, cfg.GetHosts(), cfg.HttpsPort, handler)
 		close = append(close, c)
 	}
+
 	if cfg.HttpEnabled() {
 		if cfg.HttpsEnabled() && cfg.RedirectToHttps {
 			c := server.StartHttpRedirectServer(cfg.HttpPort)
@@ -43,9 +36,54 @@ func main() {
 		}
 	}
 
-	server.WaitInterrupt()
+	log.Println("Server started")
 
-	for _, c := range close {
-		c()
+	return func() {
+		for _, c := range close {
+			c()
+		}
 	}
+}
+
+func main() {
+	if !fileExists("config.yml") {
+		config.SaveDefault()
+		log.Println("Default config saved")
+	}
+	cfg, err := config.LoadConfig("config.yml")
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+	log.Print(cfg.AsYaml())
+
+	go func() {
+		needStart := true
+		for {
+			var close func()
+			if needStart {
+				close = startServer(cfg)
+			} else {
+				close = func() {}
+			}
+
+			exit := !cfg.Watch()
+
+			close()
+			if exit {
+				break
+			}
+
+			newCfg, err := config.LoadConfig("config.yml")
+			if err != nil {
+				needStart = false
+				log.Printf("Config loading error: %s\n", err)
+			} else {
+				log.Print(cfg.AsYaml())
+				needStart = true
+				cfg = newCfg
+			}
+		}
+	}()
+
+	server.WaitInterrupt()
 }
