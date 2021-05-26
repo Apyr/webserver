@@ -28,6 +28,11 @@ endpoints:
     path: /api
     reverseProxy:
       url: http://example.com
+  - host: localhost
+    path: /deploy
+    deploy:
+      token: UFUFUF
+      command: ["bash", "-c", "echo Deployed >> deploy.txt"]
   - host:
       - example.com
       - www.example.com
@@ -63,6 +68,15 @@ func TestBasicConfig(t *testing.T) {
 						Path: "/api",
 						Action: ReverseProxy{
 							Url: "http://example.com",
+						},
+					},
+					Endpoint{
+						Host: "localhost",
+						Path: "/deploy",
+						Action: Deploy{
+							Token:   "UFUFUF",
+							Command: []string{"bash", "-c", "echo Deployed >> deploy.txt"},
+							Dir:     dir,
 						},
 					},
 					Endpoint{

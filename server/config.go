@@ -20,6 +20,8 @@ func BuildHandler(cfg config.Config) http.Handler {
 				handler = redirectHandler{action}
 			case config.ReverseProxy:
 				handler = reverseProxyHandler{action, endpoint.Path, nil}
+			case config.Deploy:
+				handler = deployHandler{action}
 			default:
 				panic("Porgramming error")
 			}

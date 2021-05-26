@@ -15,6 +15,12 @@ func toEndpoint(ep internal.Endpoint) Endpoint {
 		endpoint.Action = Static{ep.Static.Dir, *ep.Static.Page404}
 	} else if ep.Redirect != nil {
 		endpoint.Action = Redirect{*ep.Redirect}
+	} else if ep.Deploy != nil {
+		endpoint.Action = Deploy{
+			Token:   ep.Deploy.Token,
+			Command: ep.Deploy.Command,
+			Dir:     ep.Deploy.Dir,
+		}
 	}
 	return endpoint
 }

@@ -18,6 +18,12 @@ type Redirect struct {
 	To string
 }
 
+type Deploy struct {
+	Token   string
+	Command []string
+	Dir     string //working directory
+}
+
 type Action interface {
 	action()
 }
@@ -25,6 +31,7 @@ type Action interface {
 func (_ Redirect) action()     {}
 func (_ Static) action()       {}
 func (_ ReverseProxy) action() {}
+func (_ Deploy) action()       {}
 
 type Endpoint struct {
 	Host   string
