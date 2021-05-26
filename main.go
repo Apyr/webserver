@@ -45,45 +45,52 @@ func startServer(cfg config.Config) func() {
 	}
 }
 
+const configFileName = "config.yml"
+
+type loader struct {
+	files []string
+}
+
+func (loader loader) watch() bool {
+	return server.Watch(loader.files)
+}
+
+func (loader *loader) load() (config.Config, bool) {
+	for {
+		cfg, err := config.LoadConfig(configFileName)
+		if err != nil {
+			log.Printf("Config loading error: %s\n", err.Error())
+			ok := loader.watch()
+			if !ok {
+				return config.Config{}, ok
+			}
+			continue
+		}
+		loader.files = cfg.ConfigFiles
+		return cfg, true
+	}
+}
+
 func main() {
-	if !fileExists("config.yml") {
+	if !fileExists(configFileName) {
 		config.SaveDefault()
 		log.Println("Default config saved")
 	}
-	cfg, err := config.LoadConfig("config.yml")
-	if err != nil {
-		log.Fatalf("%v", err)
-	}
-	log.Print(cfg.AsYaml())
 
-	go func() {
-		needStart := true
-		for {
-			var close func()
-			if needStart {
-				close = startServer(cfg)
-			} else {
-				close = func() {}
-			}
+	loader := loader{[]string{configFileName}}
 
-			exit := !cfg.Watch()
-
-			close()
-			if exit {
-				break
-			}
-
-			newCfg, err := config.LoadConfig("config.yml")
-			if err != nil {
-				needStart = false
-				log.Printf("Config loading error: %s\n", err)
-			} else {
-				log.Print(cfg.AsYaml())
-				needStart = true
-				cfg = newCfg
-			}
+	for {
+		cfg, ok := loader.load()
+		if !ok {
+			log.Println("Interrupted")
+			break
 		}
-	}()
-
-	server.WaitInterrupt()
+		close := startServer(cfg)
+		ok = loader.watch()
+		close()
+		if !ok {
+			log.Println("Interrupted")
+			break
+		}
+	}
 }
