@@ -49,6 +49,7 @@ func LoadConfig(fileName string) (Config, error) {
 		HttpsPort:       cfg.HttpsPort,
 		RedirectToHttps: *cfg.RedirectToHttps,
 		CertsDir:        cfg.CertsDir,
+		Logging:         cfg.Logging,
 		Services:        services,
 		ConfigFiles:     files,
 	}, nil

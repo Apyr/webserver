@@ -50,6 +50,7 @@ type Config struct {
 	HttpsPort       int
 	RedirectToHttps bool
 	CertsDir        string
+	Logging         bool
 	Services        []Service
 	ConfigFiles     []string
 }

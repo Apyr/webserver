@@ -28,5 +28,8 @@ func BuildHandler(cfg config.Config) http.Handler {
 			mux.Handle(endpoint.Host+endpoint.Path, handler)
 		}
 	}
+	if cfg.Logging {
+		return logger(mux)
+	}
 	return mux
 }

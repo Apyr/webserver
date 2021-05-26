@@ -9,6 +9,7 @@ type Config struct {
 	HttpPort        int    `yaml:"httpPort"`
 	HttpsPort       int    `yaml:"httpsPort"`
 	RedirectToHttps *bool  `yaml:"redirectToHttps"`
+	Logging         bool
 	Services        yaml.MapSlice
 }
 

@@ -50,6 +50,7 @@ func TestBasicConfig(t *testing.T) {
 		HttpsPort:       443,
 		RedirectToHttps: false,
 		CertsDir:        filepath.Join(dir, "certs"),
+		Logging:         false,
 		Services: []Service{
 			Service{
 				Name:    "default",
