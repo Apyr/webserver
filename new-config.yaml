@@ -1,0 +1,25 @@
+logs: /root/mws.log
+certs: /root/certs.json
+services:
+  - hosts:
+      - chat.apyr.ru
+      - chat.kakotkin.ru
+    https: true #default: true
+    redirectToHttps: true #default: true
+    proxy: tinode:8080
+
+  - hosts: adminer-sys.apyr.ru
+    path: /
+    https: false
+    proxy: adminer:8080
+
+  - hosts: static.apyr.ru
+    path: /api
+    proxy:
+      to: my-api:8080
+      removePrefix: /api
+
+  - hosts: static.apyr.ru
+    path: /
+    page404: /root/static/404.html
+    static: /root/static
