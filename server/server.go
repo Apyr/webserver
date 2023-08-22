@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
-	"os/signal"
 	"sync"
 	"time"
 	"webserver/config"
@@ -27,13 +25,34 @@ func (err ServerError) Error() string {
 	return fmt.Sprintf("error at server %s: %s", err.Server.Addr, err.err.Error())
 }
 
-func NewServers(config *config.Config, logger *zap.SugaredLogger) []*http.Server {
-	useHTTPS := config.HTTPS()
-	servers := make([]*http.Server, 0, 2)
+const defaultTimeout = 10 * time.Second
 
-	logger = logger.Named("requests")
-	httpHandler := makeHttpHandler(config, logger, false)
-	httpsHandler := makeHttpHandler(config, logger, true)
+type Servers struct {
+	Logger *zap.SugaredLogger
+	Config *config.Config
+
+	ShutdownTimeout time.Duration
+	Errors          chan error
+
+	HttpServer  *http.Server
+	HttpsServer *http.Server
+
+	wg *sync.WaitGroup
+}
+
+func NewServers(config *config.Config, logger *zap.SugaredLogger) Servers {
+	useHTTPS := config.HTTPS()
+	requestsLogger := logger.Named("requests")
+	httpHandler := makeHttpHandler(config, requestsLogger, false)
+	httpsHandler := makeHttpHandler(config, requestsLogger, true)
+
+	servers := Servers{
+		Logger:          logger,
+		Config:          config,
+		ShutdownTimeout: defaultTimeout,
+		Errors:          make(chan error),
+		wg:              &sync.WaitGroup{},
+	}
 
 	if useHTTPS {
 		manager := autocert.Manager{
@@ -43,63 +62,64 @@ func NewServers(config *config.Config, logger *zap.SugaredLogger) []*http.Server
 		}
 		httpHandler = manager.HTTPHandler(httpHandler)
 
-		server := &http.Server{
-			Addr:      "0.0.0.0:443",
+		servers.HttpsServer = &http.Server{
+			Addr:      fmt.Sprintf("0.0.0.0:%d", config.Ports.HTTPS),
 			Handler:   httpsHandler,
 			TLSConfig: manager.TLSConfig(),
 		}
-		servers = append(servers, server)
 	}
 
-	server := &http.Server{
-		Addr:    "0.0.0.0:80",
+	servers.HttpServer = &http.Server{
+		Addr:    fmt.Sprintf("0.0.0.0:%d", config.Ports.HTTP),
 		Handler: httpHandler,
 	}
-	servers = append(servers, server)
 
 	return servers
 }
 
-func StartServers(servers []*http.Server, logger *zap.SugaredLogger, shutdownTimeout time.Duration) (func(), chan error) {
-	errors := make(chan error)
-	wg := sync.WaitGroup{}
-	wg.Add(len(servers))
-	go func() {
-		wg.Wait()
-		close(errors)
-	}()
+// asynchronously starting servers
+func (servers Servers) Start() {
+	servers.Logger.Infoln("starting servers")
 
-	for _, server := range servers {
-		go func(server *http.Server) {
-			defer wg.Done()
-			err := server.ListenAndServe()
-			if err == http.ErrServerClosed {
-				err = nil
-			} else {
-				err = ServerError{server, err}
-			}
-			errors <- err
-		}(server)
+	go servers.start(servers.HttpServer)
+	if servers.HttpsServer != nil {
+		go servers.start(servers.HttpsServer)
 	}
-
-	stop := func() {
-		logger.Infoln("stopping servers")
-		for _, server := range servers {
-			go func(server *http.Server) {
-				ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-				defer cancel()
-				server.Shutdown(ctx)
-				server.Close()
-			}(server)
-		}
-	}
-
-	return stop, errors
 }
 
-func Wait(stop func()) {
-	defer stop()
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
-	<-c
+func (servers Servers) start(server *http.Server) {
+	servers.wg.Add(1)
+	defer servers.wg.Done()
+
+	var err error
+	if server.TLSConfig != nil {
+		err = server.ListenAndServeTLS("", "")
+	} else {
+		err = server.ListenAndServe()
+	}
+
+	err = ServerError{server, err}
+	servers.Errors <- err
+}
+
+// asynchronously stoping servers
+func (servers Servers) Stop() {
+	servers.Logger.Infoln("stoping servers")
+
+	go func() {
+		servers.wg.Wait()
+		close(servers.Errors)
+	}()
+
+	go servers.stop(servers.HttpServer)
+	if servers.HttpsServer != nil {
+		go servers.stop(servers.HttpsServer)
+	}
+}
+
+func (servers Servers) stop(server *http.Server) {
+	ctx, cancel := context.WithTimeout(context.Background(), servers.ShutdownTimeout)
+	defer cancel()
+	server.Shutdown(ctx)
+	server.Close()
 }

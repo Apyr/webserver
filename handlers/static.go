@@ -28,7 +28,7 @@ func (static staticHandler) ServeHTTP(writer http.ResponseWriter, req *http.Requ
 		name = filepath.Join(name, static.Index)
 	}
 	if err != nil || !strings.HasPrefix(name, static.Dir) {
-		name = filepath.Join(static.Dir, static.Page404)
+		name = filepath.Join(static.Dir, static.NotFound)
 	}
 	http.ServeFile(writer, req, name)
 }

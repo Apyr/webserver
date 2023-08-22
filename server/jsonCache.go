@@ -2,8 +2,8 @@ package server
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"os"
 
 	"golang.org/x/crypto/acme/autocert"
@@ -14,7 +14,11 @@ type jsonFileCache string
 func (cache jsonFileCache) load() (map[string]string, error) {
 	data, err := os.ReadFile(string(cache))
 	if err != nil {
-		return nil, err
+		if errors.Is(err, os.ErrNotExist) {
+			data = []byte("{}")
+		} else {
+			return nil, err
+		}
 	}
 
 	var values map[string]string
@@ -46,16 +50,12 @@ func (cache jsonFileCache) Get(ctx context.Context, key string) ([]byte, error) 
 		return nil, err
 	}
 
-	val := values[key]
-	if val == "" {
+	data := values[key]
+	if data == "" {
 		return nil, autocert.ErrCacheMiss
 	}
-	data, err := base64.StdEncoding.DecodeString(val)
-	if err != nil {
-		return nil, err
-	}
 
-	return data, nil
+	return []byte(data), nil
 }
 
 // Put stores the data in the cache under the specified key.
@@ -67,8 +67,7 @@ func (cache jsonFileCache) Put(ctx context.Context, key string, data []byte) err
 		return err
 	}
 
-	val := base64.StdEncoding.EncodeToString(data)
-	values[key] = val
+	values[key] = string(data)
 
 	return cache.save(values)
 }

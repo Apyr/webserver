@@ -2,9 +2,9 @@ package handlers
 
 import "net/http"
 
-type RedirectToHTTPS struct{}
+type redirectToHTTPS struct{}
 
-func (RedirectToHTTPS) ServeHTTP(writer http.ResponseWriter, req *http.Request) {
+func (redirectToHTTPS) ServeHTTP(writer http.ResponseWriter, req *http.Request) {
 	url := *req.URL
 	url.Scheme = "https"
 	url.Host = req.Host

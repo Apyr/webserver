@@ -5,15 +5,22 @@ import (
 	"net/url"
 	"strings"
 
+	"go.uber.org/zap/zapcore"
 	"gopkg.in/yaml.v2"
 )
 
 type (
 	Config struct {
+		Ports     Ports      `yaml:"ports"`
 		LogFile   string     `yaml:"logFile"`
 		CertsFile string     `yaml:"certsFile"`
 		LogLevel  string     `yaml:"logLevel"`
 		Endpoints []Endpoint `yaml:"endpoints"`
+	}
+
+	Ports struct {
+		HTTP  int `yaml:"http"`
+		HTTPS int `yaml:"https"`
 	}
 
 	Endpoint struct {
@@ -29,9 +36,9 @@ type (
 	}
 
 	Static struct {
-		Dir     string `yaml:"dir"`
-		Index   string `yaml:"index"`
-		Page404 string `yaml:"page404"`
+		Dir      string `yaml:"dir"`
+		Index    string `yaml:"index"`
+		NotFound string `yaml:"notFound"`
 	}
 
 	Proxy struct {
@@ -50,10 +57,12 @@ type (
 )
 
 const (
+	defaultHttpPort  = 80
+	defaultHttpsPort = 443
 	defaultLogLevel  = "debug"
-	defaultLogFile   = "requests.log"
+	defaultLogFile   = "webserver.log"
 	defaultCertsFile = "certs.json"
-	defaultPage404   = "404.html"
+	defaultNotFound  = "404.html"
 	defaultIndex     = "index.html"
 )
 
@@ -98,6 +107,15 @@ func (config *Config) init() error {
 	if config.CertsFile == "" {
 		config.CertsFile = defaultCertsFile
 	}
+	if config.Ports.HTTP == 0 {
+		config.Ports.HTTP = defaultHttpPort
+	}
+	if config.Ports.HTTPS == 0 {
+		config.Ports.HTTPS = defaultHttpsPort
+	}
+	if level := config.GetLogLevel(); level == zapcore.InvalidLevel {
+		return errors.New("invalid log level")
+	}
 
 	for i := range config.Endpoints {
 		if err := config.Endpoints[i].init(); err != nil {
@@ -108,35 +126,52 @@ func (config *Config) init() error {
 	return nil
 }
 
-func (service *Endpoint) init() error {
-	if service.HTTPS == nil {
-		val := true
-		service.HTTPS = &val
+func (config *Config) GetLogLevel() zapcore.Level {
+	switch config.LogLevel {
+	case "debug":
+		return zapcore.DebugLevel
+	case "info":
+		return zapcore.InfoLevel
+	case "warn":
+		return zapcore.WarnLevel
+	case "error":
+		return zapcore.ErrorLevel
+	case "fatal":
+		return zapcore.PanicLevel
+	default:
+		return zapcore.InvalidLevel
 	}
-	if service.RedirectToHTTPS == nil {
-		val := *service.HTTPS
-		service.RedirectToHTTPS = &val
-	}
-
-	return service.initActions()
 }
 
-func (service *Endpoint) initActions() error {
+func (endpoint *Endpoint) init() error {
+	if endpoint.HTTPS == nil {
+		val := true
+		endpoint.HTTPS = &val
+	}
+	if endpoint.RedirectToHTTPS == nil {
+		val := true
+		endpoint.RedirectToHTTPS = &val
+	}
+
+	return endpoint.initActions()
+}
+
+func (endpoint *Endpoint) initActions() error {
 	count := 0
 
-	if service.Redirect != "" {
+	if endpoint.Redirect != "" {
 		count++
 	}
-	if service.Static != nil {
+	if endpoint.Static != nil {
 		count++
-		service.Static.init()
+		endpoint.Static.init()
 	}
-	if service.Proxy != nil {
+	if endpoint.Proxy != nil {
 		count++
 	}
-	if service.RunCommand != nil {
+	if endpoint.RunCommand != nil {
 		count++
-		if err := service.RunCommand.init(); err != nil {
+		if err := endpoint.RunCommand.init(); err != nil {
 			return err
 		}
 	}
@@ -151,8 +186,8 @@ func (service *Endpoint) initActions() error {
 }
 
 func (static *Static) init() {
-	if static.Page404 == "" {
-		static.Page404 = defaultPage404
+	if static.NotFound == "" {
+		static.NotFound = defaultNotFound
 	}
 	if static.Index == "" {
 		static.Index = defaultIndex
@@ -167,6 +202,26 @@ func (run *RunCommand) init() error {
 		return errors.New("command must not be empty in runCommand")
 	}
 	return nil
+}
+
+func (static *Static) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var dir string
+	if err := unmarshal(&dir); err == nil {
+		*static = Static{Dir: dir}
+		return nil
+	}
+
+	var st struct {
+		Dir      string `yaml:"dir"`
+		Index    string `yaml:"index"`
+		NotFound string `yaml:"notFound"`
+	}
+	if err := unmarshal(&st); err == nil {
+		*static = st
+		return nil
+	}
+
+	return errors.New("can not unmarshal static")
 }
 
 func (proxy *Proxy) UnmarshalYAML(unmarshal func(interface{}) error) error {
@@ -187,11 +242,14 @@ func (proxy *Proxy) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 	return errors.New("can not unmarshal proxy")
 }
-
 func (val *URL) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	var u string
 	if err := unmarshal(&u); err != nil {
 		return err
+	}
+
+	if !strings.HasPrefix(u, "http") {
+		u = "http://" + u
 	}
 
 	parsed, err := url.Parse(u)

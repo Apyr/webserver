@@ -10,25 +10,20 @@ import (
 )
 
 func makeHttpHandler(cfg *config.Config, logger *zap.SugaredLogger, isHTTPS bool) http.Handler {
-	router := handlers.NewRouter()
-	for _, endpoint := range cfg.Endpoints {
-		if endpoint.Disabled {
-			continue
-		}
-		handler := handlers.NewEndpointHandler(endpoint, isHTTPS)
-		router.Add(endpoint.URL.URL, handler)
-	}
-	return wrapInLogger(router, logger)
+	handler := handlers.NewEndpointsHandler(cfg.Endpoints, isHTTPS)
+	return wrapInLogger(handler, logger)
 }
 
 func wrapInLogger(handler http.Handler, logger *zap.SugaredLogger) http.Handler {
 	return httplogger.LoggingHandler(httplogger.LoggerFunc(func(l httplogger.Attrs, r *http.Request) {
 		logger.Debugw("request",
-			"requestURI", r.RequestURI,
-			"responseSize", l.ResponseSize(),
-			"status", l.Status(),
 			"method", r.Method,
-			"contentType", l.Header().Get("Content-Type"),
+			"path", r.RequestURI,
+			"host", r.Host,
+			"requestSize", l.RequestSize(),
+			"responseStatus", l.Status(),
+			"responseSize", l.ResponseSize(),
+			"responseContentType", l.Header().Get("Content-Type"),
 		)
 	}), handler)
 }

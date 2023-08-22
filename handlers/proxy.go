@@ -3,26 +3,19 @@ package handlers
 import (
 	"net/http"
 	"net/http/httputil"
-	"strings"
 	"webserver/config"
 )
 
 type proxyHandler struct {
 	config.Proxy
-	handler *httputil.ReverseProxy
+	handler http.Handler
 }
 
 func (proxy proxyHandler) ServeHTTP(writer http.ResponseWriter, req *http.Request) {
 	if proxy.handler == nil {
 		proxy.handler = httputil.NewSingleHostReverseProxy(proxy.URL.URL)
-	}
-
-	if proxy.RemovePrefix != "" {
-		if strings.HasPrefix(req.URL.Path, proxy.RemovePrefix) {
-			req.URL.Path = strings.Replace(req.URL.Path, proxy.RemovePrefix, "", 1)
-			if req.URL.Path == "" {
-				req.URL.Path = "/"
-			}
+		if proxy.RemovePrefix != "" {
+			proxy.handler = http.StripPrefix(proxy.RemovePrefix, proxy.handler)
 		}
 	}
 
