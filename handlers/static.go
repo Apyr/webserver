@@ -1,4 +1,4 @@
-package server
+package handlers
 
 import (
 	"net/http"
@@ -20,16 +20,15 @@ func isDirectory(path string) (bool, error) {
 	return fileInfo.IsDir(), err
 }
 
-func (static staticHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	name := filepath.Join(static.Dir, r.URL.Path)
+func (static staticHandler) ServeHTTP(writer http.ResponseWriter, req *http.Request) {
+	name := filepath.Join(static.Dir, req.URL.Path)
 	name = filepath.Clean(name)
 	dir, err := isDirectory(name)
 	if dir {
-		name = filepath.Join(name, "index.html")
-		dir, err = isDirectory(name)
+		name = filepath.Join(name, static.Index)
 	}
 	if err != nil || !strings.HasPrefix(name, static.Dir) {
 		name = filepath.Join(static.Dir, static.Page404)
 	}
-	http.ServeFile(w, r, name)
+	http.ServeFile(writer, req, name)
 }
