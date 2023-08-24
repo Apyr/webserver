@@ -3,83 +3,123 @@ package server
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
+	"sync"
 	"time"
+	"webserver/config"
 
+	"go.uber.org/zap"
 	"golang.org/x/crypto/acme/autocert"
 )
 
-func StartHttpsServer(certsDir string, hosts []string, port int, handler http.Handler) func() {
-	manager := &autocert.Manager{
-		Cache:      autocert.DirCache(certsDir),
-		Prompt:     autocert.AcceptTOS,
-		HostPolicy: autocert.HostWhitelist(hosts...),
-	}
-	server := &http.Server{
-		Addr:      fmt.Sprintf("0.0.0.0:%d", port),
-		Handler:   handler,
-		TLSConfig: manager.TLSConfig(),
+type ServerError struct {
+	Server *http.Server
+	err    error
+}
+
+func (err ServerError) Unwrap() error {
+	return err.err
+}
+
+func (err ServerError) Error() string {
+	return fmt.Sprintf("error at server %s: %s", err.Server.Addr, err.err.Error())
+}
+
+const defaultTimeout = 10 * time.Second
+
+type Servers struct {
+	Logger *zap.SugaredLogger
+	Config *config.Config
+
+	ShutdownTimeout time.Duration
+	Errors          chan error
+
+	HttpServer  *http.Server
+	HttpsServer *http.Server
+
+	wg *sync.WaitGroup
+}
+
+func NewServers(config *config.Config, logger *zap.SugaredLogger) Servers {
+	useHTTPS := config.HTTPS()
+	requestsLogger := logger.Named("requests")
+	httpHandler := makeHttpHandler(config, requestsLogger, false)
+	httpsHandler := makeHttpHandler(config, requestsLogger, true)
+
+	servers := Servers{
+		Logger:          logger,
+		Config:          config,
+		ShutdownTimeout: defaultTimeout,
+		Errors:          make(chan error),
+		wg:              &sync.WaitGroup{},
 	}
 
-	go func() {
-		if err := server.ListenAndServeTLS("", ""); err != http.ErrServerClosed {
-			log.Fatalf("HTTPS server error: %v", err)
+	if useHTTPS {
+		manager := autocert.Manager{
+			Cache:      jsonFileCache(config.CertsFile),
+			Prompt:     autocert.AcceptTOS,
+			HostPolicy: autocert.HostWhitelist(config.Hosts()...),
 		}
-	}()
+		httpHandler = manager.HTTPHandler(httpHandler)
 
-	return func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		server.Shutdown(ctx)
-		server.Close()
-		log.Printf("HTTPS server closed")
+		servers.HttpsServer = &http.Server{
+			Addr:      fmt.Sprintf("0.0.0.0:%d", config.Ports.HTTPS),
+			Handler:   httpsHandler,
+			TLSConfig: manager.TLSConfig(),
+		}
+	}
+
+	servers.HttpServer = &http.Server{
+		Addr:    fmt.Sprintf("0.0.0.0:%d", config.Ports.HTTP),
+		Handler: httpHandler,
+	}
+
+	return servers
+}
+
+// asynchronously starting servers
+func (servers Servers) Start() {
+	servers.Logger.Infoln("starting servers")
+
+	go servers.start(servers.HttpServer)
+	if servers.HttpsServer != nil {
+		go servers.start(servers.HttpsServer)
 	}
 }
 
-func StartHttpRedirectServer(port int) func() {
-	server := &http.Server{
-		Addr: fmt.Sprintf("0.0.0.0:%d", port),
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			url := *r.URL
-			url.Host = r.Host
-			url.Scheme = "https"
-			http.Redirect(w, r, url.String(), http.StatusMovedPermanently)
-		}),
+func (servers Servers) start(server *http.Server) {
+	servers.wg.Add(1)
+	defer servers.wg.Done()
+
+	var err error
+	if server.TLSConfig != nil {
+		err = server.ListenAndServeTLS("", "")
+	} else {
+		err = server.ListenAndServe()
 	}
 
+	err = ServerError{server, err}
+	servers.Errors <- err
+}
+
+// asynchronously stoping servers
+func (servers Servers) Stop() {
+	servers.Logger.Infoln("stoping servers")
+
 	go func() {
-		if err := server.ListenAndServe(); err != http.ErrServerClosed {
-			log.Fatalf("HTTP redirect server error: %v", err)
-		}
+		servers.wg.Wait()
+		close(servers.Errors)
 	}()
 
-	return func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		server.Shutdown(ctx)
-		server.Close()
-		log.Printf("HTTP redirect server closed")
+	go servers.stop(servers.HttpServer)
+	if servers.HttpsServer != nil {
+		go servers.stop(servers.HttpsServer)
 	}
 }
 
-func StartHttpServer(port int, handler http.Handler) func() {
-	server := &http.Server{
-		Addr:    fmt.Sprintf("0.0.0.0:%d", port),
-		Handler: handler,
-	}
-
-	go func() {
-		if err := server.ListenAndServe(); err != http.ErrServerClosed {
-			log.Fatalf("HTTP server error: %v", err)
-		}
-	}()
-
-	return func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		server.Shutdown(ctx)
-		server.Close()
-		log.Printf("HTTP server closed")
-	}
+func (servers Servers) stop(server *http.Server) {
+	ctx, cancel := context.WithTimeout(context.Background(), servers.ShutdownTimeout)
+	defer cancel()
+	server.Shutdown(ctx)
+	server.Close()
 }

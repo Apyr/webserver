@@ -1,96 +1,112 @@
 package main
 
 import (
-	"log"
+	"errors"
+	"net/http"
 	"os"
+	"os/signal"
 	"webserver/config"
 	"webserver/server"
+
+	"github.com/fsnotify/fsnotify"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
-func fileExists(filename string) bool {
-	info, err := os.Stat(filename)
-	if os.IsNotExist(err) {
-		return false
+func loadConfig() (*config.Config, error) {
+	data, err := os.ReadFile("config.yaml")
+	if err != nil {
+		return nil, err
 	}
-	return !info.IsDir()
+	var cfg config.Config
+	err = cfg.LoadFromYAML(data)
+	if err != nil {
+		return nil, err
+	}
+	return &cfg, nil
 }
 
-func startServer(cfg config.Config) func() {
-	close := make([]func(), 0)
+func newLogger(config *config.Config) *zap.SugaredLogger {
+	logCfg := zap.NewProductionConfig()
+	logCfg.EncoderConfig.TimeKey = "time"
+	logCfg.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 
-	handler := server.BuildHandler(cfg)
-
-	if cfg.HttpsEnabled() {
-		os.Mkdir(cfg.CertsDir, os.ModePerm|os.ModeDir)
-		c := server.StartHttpsServer(cfg.CertsDir, cfg.GetHosts(), cfg.HttpsPort, handler)
-		close = append(close, c)
+	logCfg.Level.SetLevel(config.GetLogLevel())
+	if config.LogFile != "/dev/null" {
+		logCfg.OutputPaths = []string{"stdout", config.LogFile}
+	} else {
+		logCfg.OutputPaths = []string{"stdout"}
 	}
+	logCfg.ErrorOutputPaths = logCfg.OutputPaths
 
-	if cfg.HttpEnabled() {
-		if cfg.HttpsEnabled() && cfg.RedirectToHttps {
-			c := server.StartHttpRedirectServer(cfg.HttpPort)
-			close = append(close, c)
-		} else {
-			c := server.StartHttpServer(cfg.HttpPort, handler)
-			close = append(close, c)
-		}
+	logger, err := logCfg.Build()
+	if err != nil {
+		panic(err.Error())
 	}
-
-	log.Println("Server started")
-
-	return func() {
-		for _, c := range close {
-			c()
-		}
-	}
+	return logger.Sugar()
 }
 
-const configFileName = "config.yml"
+func watchForFile(fileName string) (bool, error) {
+	// fs watcher
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return false, err
+	}
+	defer watcher.Close()
 
-type loader struct {
-	files []string
-}
+	err = watcher.Add(fileName)
+	if err != nil {
+		return false, err
+	}
 
-func (loader loader) watch() bool {
-	return server.Watch(loader.files)
-}
+	// Ctrl-C signal
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt)
+	defer signal.Stop(signals)
 
-func (loader *loader) load() (config.Config, bool) {
-	for {
-		cfg, err := config.LoadConfig(configFileName)
-		if err != nil {
-			log.Printf("Config loading error: %s\n", err.Error())
-			ok := loader.watch()
-			if !ok {
-				return config.Config{}, ok
-			}
-			continue
-		}
-		loader.files = cfg.ConfigFiles
-		return cfg, true
+	// wait for any event
+	select {
+	case <-signals:
+		return false, nil
+	case <-watcher.Events:
+		return true, nil
+	case err := <-watcher.Errors:
+		return false, err
 	}
 }
 
 func main() {
-	if !fileExists(configFileName) {
-		config.SaveDefault()
-		log.Println("Default config saved")
-	}
-
-	loader := loader{[]string{configFileName}}
-
-	for {
-		cfg, ok := loader.load()
-		if !ok {
-			log.Println("Interrupted")
-			break
+	continueExec := true
+	for continueExec {
+		config, err := loadConfig()
+		if err != nil {
+			panic(err.Error())
 		}
-		close := startServer(cfg)
-		ok = loader.watch()
-		close()
-		if !ok {
-			log.Println("Interrupted")
-			break
+
+		logger := newLogger(config)
+		defer logger.Sync()
+
+		servers := server.NewServers(config, logger)
+		servers.Start()
+
+		continueExec, err = watchForFile("config.yaml")
+		if err != nil {
+			logger.Error(err)
+		} else {
+			if continueExec {
+				logger.Info("config.yaml changed, reloading...")
+			} else {
+				logger.Info("interrupt signal received, stoping...")
+			}
+		}
+
+		servers.Stop()
+		for err := range servers.Errors {
+			if errors.Is(err, http.ErrServerClosed) {
+				logger.Info(err)
+			} else {
+				logger.Error(err)
+			}
 		}
 	}
 }
