@@ -7,21 +7,21 @@ import (
 )
 
 func newEndpointHandler(endpoint config.Endpoint, isHTTPS bool) http.Handler {
-	if !isHTTPS && *endpoint.HTTPS && *endpoint.RedirectToHTTPS {
-		return redirectToHTTPS{}
+	if !isHTTPS && endpoint.HTTPS != "" && endpoint.RedirectToHTTPS {
+		return newRedirectToHTTPSHandler()
 	}
 
 	if endpoint.Redirect != "" {
-		return redirectHandler{endpoint.Redirect}
+		return newRedirectHandler(endpoint.Redirect)
 	}
 	if endpoint.Static != nil {
-		return staticHandler{*endpoint.Static}
+		return newStaticHandler(*endpoint.Static)
 	}
 	if endpoint.Proxy != nil {
-		return proxyHandler{*endpoint.Proxy, nil}
+		return newProxyHandler(*endpoint.Proxy)
 	}
 	if endpoint.RunCommand != nil {
-		return runCommandHandler{*endpoint.RunCommand}
+		return newRunCommandHandler(*endpoint.RunCommand)
 	}
 
 	panic("unknown action")
@@ -30,7 +30,7 @@ func newEndpointHandler(endpoint config.Endpoint, isHTTPS bool) http.Handler {
 func NewEndpointsHandler(endpoints []config.Endpoint, isHTTPS bool) http.Handler {
 	mux := http.NewServeMux()
 	for _, endpoint := range endpoints {
-		if endpoint.Disabled {
+		if endpoint.Enabled != nil || !*endpoint.Enabled {
 			continue
 		}
 		handler := newEndpointHandler(endpoint, isHTTPS)

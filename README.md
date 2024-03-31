@@ -16,7 +16,7 @@ Simple http and https server (static and reverse proxy) written in Go.
 
 ```yaml
 logFile: /path/to/log/file.log
-logLevel: debug #one of debug|info|warn|error|fatal
+logLevel: debug #one of debug|info|warn|error
 certsFile: /path/to/certs.json
 ports:
   http: 80
@@ -24,24 +24,24 @@ ports:
 
 endpoints:
 
-  - url: proxy.example.com/myapp
-    https: true #default: true
-    redirectToHttps: true #default: true
-    disabled: true #default: false
+  - url: http://proxy.example.com/myapp
+    https: letsencrypt # one of "" letsencrypt self-signed default: ""
+    redirectToHttps: true # default: true
+    enabled: true # default: true
     proxy: 
         url: https://example.com
         removePrefix: /myapp
 
-  - url: static.example.com
+  - url: http://static.example.com
     static: 
       dir: /path/to/dir/with/static/files
-      index: index.html
-      notFound: 404.html
+      index: index.html # default: index.html
+      notFound: 404.html # default: 404.html
 
-  - url: redirect.example.com
+  - url: http://redirect.example.com
     redirect: https://google.com
 
-  - url: command.example.com
+  - url: http://command.example.com
     runCommand:
       command: ["/bin/bash", "/root/deploy.sh"]
       token: "my-very-secret-token"

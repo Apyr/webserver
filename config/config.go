@@ -1,76 +1,90 @@
 package config
 
 import (
-	"errors"
+	"log/slog"
 	"net/url"
-	"strings"
 
-	"go.uber.org/zap/zapcore"
+	"github.com/go-playground/validator/v10"
 	"gopkg.in/yaml.v2"
 )
 
 type (
 	Config struct {
-		Ports     Ports      `yaml:"ports"`
-		LogFile   string     `yaml:"logFile"`
-		CertsFile string     `yaml:"certsFile"`
-		LogLevel  string     `yaml:"logLevel"`
-		Endpoints []Endpoint `yaml:"endpoints"`
+		Ports     Ports      `yaml:"ports" validate:"required"`
+		LogFile   string     `yaml:"logFile" validate:"required"`
+		CertsFile string     `yaml:"certsFile" validate:"required"`
+		LogLevel  string     `yaml:"logLevel" validate:"oneof='debug' 'info' 'warn' 'error'"`
+		Endpoints []Endpoint `yaml:"endpoints" validate:"dive"`
 	}
 
 	Ports struct {
-		HTTP  int `yaml:"http"`
-		HTTPS int `yaml:"https"`
+		HTTP  int `yaml:"http" validate:"required,gt=0"`
+		HTTPS int `yaml:"https" validate:"optional,ge=0"`
 	}
 
 	Endpoint struct {
-		URL             URL   `yaml:"url"`
-		HTTPS           *bool `yaml:"https"`
-		RedirectToHTTPS *bool `yaml:"redirectToHttps"`
-		Disabled        bool  `yaml:"disabled"`
+		URL             *url.URL `yaml:"url" validate:"url,required"`
+		HTTPS           string   `yaml:"https" validate:"oneof='' 'letsencrypt' 'self-signed'"`
+		RedirectToHTTPS bool     `yaml:"redirectToHttps"`
+		Enabled         *bool    `yaml:"enabled"`
 
-		Redirect   string      `yaml:"redirect"`
-		Static     *Static     `yaml:"static"`
-		Proxy      *Proxy      `yaml:"proxy"`
-		RunCommand *RunCommand `yaml:"runCommand"`
+		Redirect   string      `yaml:"redirect" validate:"required_without=Static Proxy RunCommand"`
+		Static     *Static     `yaml:"static" validate:"required_without=Redirect Proxy RunCommand"`
+		Proxy      *Proxy      `yaml:"proxy" validate:"required_without=Static Redirect RunCommand"`
+		RunCommand *RunCommand `yaml:"runCommand"  validate:"required_without=Static Proxy Redirect"`
 	}
 
 	Static struct {
-		Dir      string `yaml:"dir"`
-		Index    string `yaml:"index"`
-		NotFound string `yaml:"notFound"`
+		Dir      string `yaml:"dir" validate:"required"`
+		Index    string `yaml:"index" validate:"required"`
+		NotFound string `yaml:"notFound" validate:"required"`
 	}
 
 	Proxy struct {
-		URL          URL    `yaml:"url"`
-		RemovePrefix string `yaml:"removePrefix"`
+		URL          *url.URL `yaml:"url" validate:"required,url"`
+		RemovePrefix string   `yaml:"removePrefix"`
 	}
 
 	RunCommand struct {
-		Token   string   `yaml:"token"`
-		Command []string `yaml:"command"`
-	}
-
-	URL struct {
-		*url.URL
+		Token   string   `yaml:"token" validate:"required"`
+		Command []string `yaml:"command" validate:"required,min=1"`
 	}
 )
 
+var defaultConfig = Config{
+	Ports: Ports{
+		HTTP:  80,
+		HTTPS: 443,
+	},
+	LogFile:   "requests.log",
+	CertsFile: "certs.json",
+	LogLevel:  "debug",
+}
+
+var validatorInstance = validator.New()
+
 const (
-	defaultHttpPort  = 80
-	defaultHttpsPort = 443
-	defaultLogLevel  = "debug"
-	defaultLogFile   = "webserver.log"
-	defaultCertsFile = "certs.json"
-	defaultNotFound  = "404.html"
-	defaultIndex     = "index.html"
+	defaultIndex    = "index.html"
+	defaultNotFound = "404.html"
 )
 
 func (config *Config) LoadFromYAML(data []byte) error {
+	*config = defaultConfig
 	if err := yaml.Unmarshal(data, config); err != nil {
 		return err
 	}
-	return config.init()
+	for i, endpoint := range config.Endpoints {
+		if endpoint.Static != nil {
+			if endpoint.Static.Index == "" {
+				endpoint.Static.Index = defaultIndex
+			}
+			if endpoint.Static.NotFound == "" {
+				endpoint.Static.NotFound = defaultNotFound
+			}
+			config.Endpoints[i] = endpoint
+		}
+	}
+	return validatorInstance.Struct(config)
 }
 
 func (config *Config) Hosts() []string {
@@ -88,7 +102,7 @@ func (config *Config) Hosts() []string {
 
 func (config *Config) HTTPS() bool {
 	for _, endpoint := range config.Endpoints {
-		if *endpoint.HTTPS {
+		if endpoint.HTTPS != "" {
 			return true
 		}
 	}
@@ -96,167 +110,17 @@ func (config *Config) HTTPS() bool {
 	return false
 }
 
-func (config *Config) init() error {
-	config.LogLevel = strings.ToLower(config.LogLevel)
-	if config.LogLevel == "" {
-		config.LogLevel = defaultLogLevel
-	}
-	if config.LogFile == "" {
-		config.LogFile = defaultLogFile
-	}
-	if config.CertsFile == "" {
-		config.CertsFile = defaultCertsFile
-	}
-	if config.Ports.HTTP == 0 {
-		config.Ports.HTTP = defaultHttpPort
-	}
-	if config.Ports.HTTPS == 0 {
-		config.Ports.HTTPS = defaultHttpsPort
-	}
-	if level := config.GetLogLevel(); level == zapcore.InvalidLevel {
-		return errors.New("invalid log level")
-	}
-
-	for i := range config.Endpoints {
-		if err := config.Endpoints[i].init(); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (config *Config) GetLogLevel() zapcore.Level {
+func (config *Config) GetLogLevel() slog.Level {
 	switch config.LogLevel {
-	case "debug":
-		return zapcore.DebugLevel
+	case "", "debug":
+		return slog.LevelDebug
 	case "info":
-		return zapcore.InfoLevel
+		return slog.LevelInfo
 	case "warn":
-		return zapcore.WarnLevel
+		return slog.LevelWarn
 	case "error":
-		return zapcore.ErrorLevel
-	case "fatal":
-		return zapcore.PanicLevel
+		return slog.LevelError
 	default:
-		return zapcore.InvalidLevel
+		panic("unknown log level")
 	}
-}
-
-func (endpoint *Endpoint) init() error {
-	if endpoint.HTTPS == nil {
-		val := true
-		endpoint.HTTPS = &val
-	}
-	if endpoint.RedirectToHTTPS == nil {
-		val := true
-		endpoint.RedirectToHTTPS = &val
-	}
-
-	return endpoint.initActions()
-}
-
-func (endpoint *Endpoint) initActions() error {
-	count := 0
-
-	if endpoint.Redirect != "" {
-		count++
-	}
-	if endpoint.Static != nil {
-		count++
-		endpoint.Static.init()
-	}
-	if endpoint.Proxy != nil {
-		count++
-	}
-	if endpoint.RunCommand != nil {
-		count++
-		if err := endpoint.RunCommand.init(); err != nil {
-			return err
-		}
-	}
-
-	if count == 0 {
-		return errors.New("no actions in a service")
-	}
-	if count > 1 {
-		return errors.New("too many actions in a service")
-	}
-	return nil
-}
-
-func (static *Static) init() {
-	if static.NotFound == "" {
-		static.NotFound = defaultNotFound
-	}
-	if static.Index == "" {
-		static.Index = defaultIndex
-	}
-}
-
-func (run *RunCommand) init() error {
-	if run.Token == "" {
-		return errors.New("token must not be empty in runCommand")
-	}
-	if len(run.Command) == 0 {
-		return errors.New("command must not be empty in runCommand")
-	}
-	return nil
-}
-
-func (static *Static) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	var dir string
-	if err := unmarshal(&dir); err == nil {
-		*static = Static{Dir: dir}
-		return nil
-	}
-
-	var st struct {
-		Dir      string `yaml:"dir"`
-		Index    string `yaml:"index"`
-		NotFound string `yaml:"notFound"`
-	}
-	if err := unmarshal(&st); err == nil {
-		*static = st
-		return nil
-	}
-
-	return errors.New("can not unmarshal static")
-}
-
-func (proxy *Proxy) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	var url URL
-	if err := unmarshal(&url); err == nil {
-		*proxy = Proxy{URL: url}
-		return nil
-	}
-
-	var pr struct {
-		URL          URL    `yaml:"url"`
-		RemovePrefix string `yaml:"removePrefix"`
-	}
-	if err := unmarshal(&pr); err == nil {
-		*proxy = pr
-		return nil
-	}
-
-	return errors.New("can not unmarshal proxy")
-}
-func (val *URL) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	var u string
-	if err := unmarshal(&u); err != nil {
-		return err
-	}
-
-	if !strings.HasPrefix(u, "http") {
-		u = "http://" + u
-	}
-
-	parsed, err := url.Parse(u)
-	if err != nil {
-		return err
-	}
-
-	*val = URL{parsed}
-	return nil
 }

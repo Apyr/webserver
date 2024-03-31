@@ -3,12 +3,12 @@ package server
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
 	"webserver/config"
 
-	"go.uber.org/zap"
 	"golang.org/x/crypto/acme/autocert"
 )
 
@@ -28,7 +28,7 @@ func (err ServerError) Error() string {
 const defaultTimeout = 10 * time.Second
 
 type Servers struct {
-	Logger *zap.SugaredLogger
+	Logger *slog.Logger
 	Config *config.Config
 
 	ShutdownTimeout time.Duration
@@ -40,9 +40,9 @@ type Servers struct {
 	wg *sync.WaitGroup
 }
 
-func NewServers(config *config.Config, logger *zap.SugaredLogger) Servers {
+func NewServers(config *config.Config, logger *slog.Logger) Servers {
 	useHTTPS := config.HTTPS()
-	requestsLogger := logger.Named("requests")
+	requestsLogger := logger.WithGroup("requests")
 	httpHandler := makeHttpHandler(config, requestsLogger, false)
 	httpsHandler := makeHttpHandler(config, requestsLogger, true)
 
@@ -79,7 +79,7 @@ func NewServers(config *config.Config, logger *zap.SugaredLogger) Servers {
 
 // asynchronously starting servers
 func (servers Servers) Start() {
-	servers.Logger.Infoln("starting servers")
+	servers.Logger.Info("starting servers")
 
 	go servers.start(servers.HttpServer)
 	if servers.HttpsServer != nil {
@@ -104,7 +104,7 @@ func (servers Servers) start(server *http.Server) {
 
 // asynchronously stoping servers
 func (servers Servers) Stop() {
-	servers.Logger.Infoln("stoping servers")
+	servers.Logger.Info("stoping servers")
 
 	go func() {
 		servers.wg.Wait()
