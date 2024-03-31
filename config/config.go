@@ -2,7 +2,6 @@ package config
 
 import (
 	"log/slog"
-	"net/url"
 
 	"github.com/go-playground/validator/v10"
 	"gopkg.in/yaml.v2"
@@ -19,19 +18,19 @@ type (
 
 	Ports struct {
 		HTTP  int `yaml:"http" validate:"required,gt=0"`
-		HTTPS int `yaml:"https" validate:"optional,ge=0"`
+		HTTPS int `yaml:"https" validate:"gte=0"`
 	}
 
 	Endpoint struct {
-		URL             *url.URL `yaml:"url" validate:"url,required"`
-		HTTPS           string   `yaml:"https" validate:"oneof='' 'letsencrypt' 'self-signed'"`
-		RedirectToHTTPS bool     `yaml:"redirectToHttps"`
-		Enabled         *bool    `yaml:"enabled"`
+		URL             URL    `yaml:"url"`
+		HTTPS           string `yaml:"https" validate:"oneof='' 'letsencrypt' 'self-signed'"`
+		RedirectToHTTPS bool   `yaml:"redirectToHttps"`
+		Enabled         *bool  `yaml:"enabled"`
 
-		Redirect   string      `yaml:"redirect" validate:"required_without=Static Proxy RunCommand"`
-		Static     *Static     `yaml:"static" validate:"required_without=Redirect Proxy RunCommand"`
-		Proxy      *Proxy      `yaml:"proxy" validate:"required_without=Static Redirect RunCommand"`
-		RunCommand *RunCommand `yaml:"runCommand"  validate:"required_without=Static Proxy Redirect"`
+		Redirect   string      `yaml:"redirect" validate:"required_without_all=Static Proxy RunCommand"`
+		Static     *Static     `yaml:"static" validate:"required_without_all=Redirect Proxy RunCommand"`
+		Proxy      *Proxy      `yaml:"proxy" validate:"required_without_all=Static Redirect RunCommand"`
+		RunCommand *RunCommand `yaml:"runCommand" validate:"required_without_all=Static Proxy Redirect"`
 	}
 
 	Static struct {
@@ -41,8 +40,8 @@ type (
 	}
 
 	Proxy struct {
-		URL          *url.URL `yaml:"url" validate:"required,url"`
-		RemovePrefix string   `yaml:"removePrefix"`
+		URL          URL    `yaml:"url"`
+		RemovePrefix string `yaml:"removePrefix"`
 	}
 
 	RunCommand struct {

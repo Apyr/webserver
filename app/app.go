@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"webserver/config"
-	"webserver/server"
 
+	"github.com/apyr/webserver/config"
+	"github.com/apyr/webserver/server"
 	"github.com/fsnotify/fsnotify"
 )
 
@@ -22,12 +22,13 @@ type App struct {
 
 func NewApp() *App {
 	app := &App{
-		logger:     slog.Default(),
+		logger:     slog.New(slog.NewJSONHandler(os.Stdout, nil)),
 		interrupts: make(chan os.Signal, 1),
 	}
 	signal.Notify(app.interrupts, os.Interrupt)
 	if err := app.newWatcher(); err != nil {
 		app.logger.Error("watcher creation error", slog.Any("error", err))
+		os.Exit(1)
 	}
 	return app
 }

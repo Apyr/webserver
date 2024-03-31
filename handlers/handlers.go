@@ -5,7 +5,8 @@ import (
 	"net/http/httputil"
 	"path/filepath"
 	"strings"
-	"webserver/config"
+
+	"github.com/apyr/webserver/config"
 )
 
 func newRedirectHandler(url string) http.Handler {
@@ -22,7 +23,7 @@ func newRedirectToHTTPSHandler() http.Handler {
 }
 
 func newProxyHandler(proxy config.Proxy) http.Handler {
-	var handler http.Handler = httputil.NewSingleHostReverseProxy(proxy.URL)
+	var handler http.Handler = httputil.NewSingleHostReverseProxy(proxy.URL.URL)
 	if proxy.RemovePrefix != "" {
 		handler = http.StripPrefix(proxy.RemovePrefix, handler)
 	}

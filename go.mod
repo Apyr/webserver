@@ -1,4 +1,4 @@
-module webserver
+module github.com/apyr/webserver
 
 go 1.22
 

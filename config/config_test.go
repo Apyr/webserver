@@ -16,25 +16,24 @@ ports:
   https: 8443
 endpoints:
   - url: localhost
-    https: false
     static: 
       dir: /home/web/static
 `
-	boolTrue := true
-	boolFalse := false
 	endpointURL, err := url.Parse("http://localhost")
 	assert.NoError(t, err)
 	assert.Equal(t, endpointURL.Hostname(), "localhost")
 
+	u, err := url.Parse("http://localhost")
+	assert.NoError(t, err)
 	expected := Config{
 		LogFile:   "/home/log.log",
 		CertsFile: "/home/certs.json",
 		Ports:     Ports{HTTP: 8080, HTTPS: 8443},
 		LogLevel:  "debug",
 		Endpoints: []Endpoint{{
-			URL:             URL{endpointURL},
-			HTTPS:           &boolFalse,
-			RedirectToHTTPS: &boolTrue,
+			URL:             URL{u},
+			HTTPS:           "",
+			RedirectToHTTPS: false,
 			Static: &Static{
 				Dir:      "/home/web/static",
 				Index:    "index.html",

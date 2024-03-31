@@ -1,6 +1,6 @@
 package main
 
-import "webserver/app"
+import "github.com/apyr/webserver/app"
 
 func main() {
 	app := app.NewApp()

@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
-	"webserver/config"
 
+	"github.com/apyr/webserver/config"
 	"golang.org/x/crypto/acme/autocert"
 )
 

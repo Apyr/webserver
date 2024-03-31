@@ -3,7 +3,8 @@ package handlers
 import (
 	"net/http"
 	"strings"
-	"webserver/config"
+
+	"github.com/apyr/webserver/config"
 )
 
 func newEndpointHandler(endpoint config.Endpoint, isHTTPS bool) http.Handler {

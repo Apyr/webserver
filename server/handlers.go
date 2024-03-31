@@ -3,9 +3,9 @@ package server
 import (
 	"log/slog"
 	"net/http"
-	"webserver/config"
-	"webserver/handlers"
 
+	"github.com/apyr/webserver/config"
+	"github.com/apyr/webserver/handlers"
 	httplogger "github.com/shogo82148/go-http-logger"
 )
 

@@ -24,28 +24,27 @@ ports:
 
 endpoints:
 
-  - url: http://proxy.example.com/myapp
+  - url: proxy.example.com/myapp
     https: letsencrypt # one of "" letsencrypt self-signed default: ""
     redirectToHttps: true # default: true
     enabled: true # default: true
     proxy: 
-        url: https://example.com
-        removePrefix: /myapp
+      url: https://example.com
+      removePrefix: /myapp
 
-  - url: http://static.example.com
+  - url: static.example.com
     static: 
       dir: /path/to/dir/with/static/files
       index: index.html # default: index.html
       notFound: 404.html # default: 404.html
 
-  - url: http://redirect.example.com
+  - url: redirect.example.com
     redirect: https://google.com
 
-  - url: http://command.example.com
+  - url: command.example.com
     runCommand:
       command: ["/bin/bash", "/root/deploy.sh"]
       token: "my-very-secret-token"
-
 ```
 
 ### License
