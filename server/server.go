@@ -2,14 +2,16 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
+	"log"
 	"log/slog"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/apyr/webserver/config"
-	"golang.org/x/crypto/acme/autocert"
+	"github.com/apyr/webserver/tlsutils"
 )
 
 type ServerError struct {
@@ -40,6 +42,15 @@ type Servers struct {
 	wg *sync.WaitGroup
 }
 
+type logWriter struct {
+	logger *slog.Logger
+}
+
+func (writer logWriter) Write(p []byte) (int, error) {
+	writer.logger.Error(string(p))
+	return len(p), nil
+}
+
 func NewServers(config *config.Config, logger *slog.Logger) Servers {
 	useHTTPS := config.HTTPS()
 	requestsLogger := logger.WithGroup("requests")
@@ -54,24 +65,29 @@ func NewServers(config *config.Config, logger *slog.Logger) Servers {
 		wg:              &sync.WaitGroup{},
 	}
 
+	errLogger := log.New(logWriter{logger}, "", 0)
+
 	if useHTTPS {
-		manager := autocert.Manager{
-			Cache:      jsonFileCache(config.CertsFile),
-			Prompt:     autocert.AcceptTOS,
-			HostPolicy: autocert.HostWhitelist(config.Hosts()...),
-		}
-		httpHandler = manager.HTTPHandler(httpHandler)
+		var tlsCfg *tls.Config
+		tlsCfg, httpHandler = tlsutils.NewTLSConfig(
+			jsonFileCache(config.CertsFile),
+			httpHandler,
+			config.AcmeHosts(),
+			config.SelfHosts(),
+		)
 
 		servers.HttpsServer = &http.Server{
 			Addr:      fmt.Sprintf("0.0.0.0:%d", config.Ports.HTTPS),
 			Handler:   httpsHandler,
-			TLSConfig: manager.TLSConfig(),
+			TLSConfig: tlsCfg,
+			ErrorLog:  errLogger,
 		}
 	}
 
 	servers.HttpServer = &http.Server{
-		Addr:    fmt.Sprintf("0.0.0.0:%d", config.Ports.HTTP),
-		Handler: httpHandler,
+		Addr:     fmt.Sprintf("0.0.0.0:%d", config.Ports.HTTP),
+		Handler:  httpHandler,
+		ErrorLog: errLogger,
 	}
 
 	return servers

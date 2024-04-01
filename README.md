@@ -6,7 +6,8 @@ Simple http and https server (static and reverse proxy) written in Go.
 * minimal configuring in yaml file
 * logging
 * serving static files
-* auto letsencrypt
+* auto acme/letsencrypt
+* auto generate self signed certificates
 * http to https redirect
 * reverse proxy
 * redirect
@@ -25,7 +26,7 @@ ports:
 endpoints:
 
   - url: proxy.example.com/myapp
-    https: letsencrypt # one of "" letsencrypt self-signed default: ""
+    https: acme # one of "" acme self default: ""
     redirectToHttps: true # default: true
     enabled: true # default: true
     proxy: 

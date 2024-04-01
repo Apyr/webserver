@@ -22,8 +22,8 @@ type (
 	}
 
 	Endpoint struct {
-		URL             URL    `yaml:"url"`
-		HTTPS           string `yaml:"https" validate:"oneof='' 'letsencrypt' 'self-signed'"`
+		URL             URL    `yaml:"url" validate:"required"`
+		HTTPS           string `yaml:"https" validate:"oneof='' 'acme' 'self'"`
 		RedirectToHTTPS bool   `yaml:"redirectToHttps"`
 		Enabled         *bool  `yaml:"enabled"`
 
@@ -86,9 +86,50 @@ func (config *Config) LoadFromYAML(data []byte) error {
 	return validatorInstance.Struct(config)
 }
 
-func (config *Config) Hosts() []string {
+func (config *Config) AllHosts() []string {
 	hostsMap := make(map[string]struct{}, len(config.Endpoints))
 	for _, endpoint := range config.Endpoints {
+		if endpoint.Enabled != nil && !*endpoint.Enabled {
+			continue
+		}
+		hostsMap[endpoint.URL.Hostname()] = struct{}{}
+	}
+
+	hosts := make([]string, 0, len(hostsMap))
+	for host := range hostsMap {
+		hosts = append(hosts, host)
+	}
+	return hosts
+}
+
+func (config *Config) AcmeHosts() []string {
+	hostsMap := make(map[string]struct{}, len(config.Endpoints))
+	for _, endpoint := range config.Endpoints {
+		if endpoint.Enabled != nil && !*endpoint.Enabled {
+			continue
+		}
+		if endpoint.HTTPS != "acme" {
+			continue
+		}
+		hostsMap[endpoint.URL.Hostname()] = struct{}{}
+	}
+
+	hosts := make([]string, 0, len(hostsMap))
+	for host := range hostsMap {
+		hosts = append(hosts, host)
+	}
+	return hosts
+}
+
+func (config *Config) SelfHosts() []string {
+	hostsMap := make(map[string]struct{}, len(config.Endpoints))
+	for _, endpoint := range config.Endpoints {
+		if endpoint.Enabled != nil && !*endpoint.Enabled {
+			continue
+		}
+		if endpoint.HTTPS != "self" {
+			continue
+		}
 		hostsMap[endpoint.URL.Hostname()] = struct{}{}
 	}
 

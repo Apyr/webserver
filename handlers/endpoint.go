@@ -31,7 +31,7 @@ func newEndpointHandler(endpoint config.Endpoint, isHTTPS bool) http.Handler {
 func NewEndpointsHandler(endpoints []config.Endpoint, isHTTPS bool) http.Handler {
 	mux := http.NewServeMux()
 	for _, endpoint := range endpoints {
-		if endpoint.Enabled != nil || !*endpoint.Enabled {
+		if endpoint.Enabled != nil && !*endpoint.Enabled {
 			continue
 		}
 		handler := newEndpointHandler(endpoint, isHTTPS)

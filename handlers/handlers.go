@@ -31,9 +31,9 @@ func newProxyHandler(proxy config.Proxy) http.Handler {
 }
 
 func newStaticHandler(static config.Static) http.Handler {
+	static.Dir = filepath.Clean(static.Dir)
 	return http.HandlerFunc(func(writer http.ResponseWriter, req *http.Request) {
 		name := filepath.Join(static.Dir, req.URL.Path)
-		name = filepath.Clean(name)
 		dir, err := isDirectory(name)
 		if dir {
 			name = filepath.Join(name, static.Index)

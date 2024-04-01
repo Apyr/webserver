@@ -70,7 +70,7 @@ endpoints:
 	err := config.LoadFromYAML([]byte(configYaml))
 	assert.NoError(t, err)
 
-	hosts := config.Hosts()
+	hosts := config.AllHosts()
 	assert.Equal(t, 3, len(hosts))
 	assert.Contains(t, hosts, "localhost1")
 	assert.Contains(t, hosts, "localhost2")
